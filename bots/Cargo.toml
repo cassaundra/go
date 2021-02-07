@@ -1,0 +1,14 @@
+[package]
+name = "go-bots"
+version = "0.1.0"
+authors = ["Cassaundra <cass@cassaundra.io>"]
+edition = "2018"
+
+[dependencies]
+derive_builder = "0.9"
+goban = { version = "0.16", features = ["history"] }
+rand = "0.8"
+sgf-parse = "2.0"
+
+log = "0.4"
+pretty_env_logger = "0.4"
