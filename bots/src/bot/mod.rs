@@ -5,7 +5,10 @@ mod random;
 pub use random::*;
 
 mod gtp;
-pub use gtp::*;
+pub use self::gtp::*;
+
+// mod mcts;
+// pub use mcts::*;
 
 pub const RECURSE_DEPTH: usize = 1;
 

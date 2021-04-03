@@ -61,7 +61,7 @@ impl MixedBot {
 
         MixedBot {
             bots,
-            weight_bounds: weight_bounds,
+            weight_bounds,
             rng: thread_rng(),
         }
     }

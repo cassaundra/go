@@ -1,6 +1,8 @@
 use goban::rules::*;
 use goban::rules::game::*;
 
+use log::*;
+
 use crate::Bot;
 
 // TODO tournament stuff
@@ -25,6 +27,16 @@ pub struct GameOptions {
     pub rules: Rule,
     pub board_size: (u32, u32),
     pub max_moves: usize,
+}
+
+impl Default for GameOptions {
+    fn default() -> Self {
+        GameOptions {
+            rules: JAPANESE,
+            board_size: (19, 19),
+            max_moves: 512,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -66,7 +78,7 @@ impl PairingResults {
     }
 }
 
-pub fn play_pairing(options: &TournamentOptions, black: &mut Box<dyn Bot>, white: &mut Box<dyn Bot>) -> PairingResults {
+pub fn play_pairing(options: &TournamentOptions, black: &mut impl Bot, white: &mut impl Bot) -> PairingResults {
     let mut results = PairingResults::new();
 
     for _ in 0..options.num_matches {
@@ -82,7 +94,7 @@ pub fn play_pairing(options: &TournamentOptions, black: &mut Box<dyn Bot>, white
     results
 }
 
-pub fn play_game(options: &GameOptions, black: &mut Box<dyn Bot>, white: &mut Box<dyn Bot>) -> EndGame {
+pub fn play_game(options: &GameOptions, black: &mut impl Bot, white: &mut impl Bot) -> EndGame {
     let mut game = Game::builder()
         .size(options.board_size)
         .rule(options.rules)
@@ -91,12 +103,22 @@ pub fn play_game(options: &GameOptions, black: &mut Box<dyn Bot>, white: &mut Bo
     let mut moves = 0;
 
     while !game.is_over() && moves < options.max_moves {
+        let turn = game.turn();
         let bot_move = match game.turn() {
             Player::Black => black.play(&game),
             Player::White => white.play(&game),
         };
 
-        game.play(bot_move);
+        trace!("PLAY: {:?} at {:2?} (Move {})", turn, bot_move, moves + 1);
+
+        // TODO handle illegal plays with Game::try_play
+        // info!("SGF: {}", crate::sgf::game_to_sgf(&game, "Black", "White"));
+        match game.try_play(bot_move) {
+            Ok(_) => {},
+            Err(err) => {
+                error!("Error: {:?}", err);
+            }
+        }
 
         moves += 1;
     }

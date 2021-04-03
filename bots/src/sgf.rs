@@ -11,16 +11,16 @@ use goban::rules::game::*;
 use sgf_parse::{serialize, SgfNodeBuilder, SgfProp};
 
 /// Convert a game record to SGF format.
-pub fn game_to_sgf(game: &Game, player_black: String, player_white: String) -> String {
+pub fn game_to_sgf(game: &Game, player_black: impl Into<String>, player_white: impl Into<String>) -> String {
     // root node
     let mut root = SgfNodeBuilder::new();
 
     // set game properties
 
     // black player
-    root.properties.push(SgfProp::new(String::from("PB"), vec![player_black]));
+    root.properties.push(SgfProp::new(String::from("PB"), vec![player_black.into()]));
     // white player
-    root.properties.push(SgfProp::new(String::from("PW"), vec![player_white]));
+    root.properties.push(SgfProp::new(String::from("PW"), vec![player_white.into()]));
     // komi
     root.properties.push(SgfProp::new(String::from("KM"), vec![game.komi().to_string()]));
 
@@ -81,7 +81,7 @@ pub fn game_to_sgf(game: &Game, player_black: String, player_white: String) -> S
 }
 
 /// Convert a [Player](goban::rules::Player) into a SGF-friendly letter.
-fn player_letter(player: Player) -> String {
+pub fn player_letter(player: Player) -> String {
     match player {
         Player::Black => String::from("B"),
         Player::White => String::from("W"),
@@ -89,7 +89,7 @@ fn player_letter(player: Player) -> String {
 }
 
 /// Calculate the difference in stones between two board states.
-fn goban_difference(before: &Goban, after: &Goban) -> Vec<Stone> {
+pub fn goban_difference(before: &Goban, after: &Goban) -> Vec<Stone> {
     let before: HashSet<Stone> = before.get_stones().collect();
     after.get_stones()
         .filter(|stone| !before.contains(stone))
