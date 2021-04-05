@@ -16,13 +16,14 @@ use crate::Bot;
 
 // TODO implement builder
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Builder)]
 pub struct TournamentOptions {
     pub game_options: GameOptions,
     pub num_matches: usize,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Builder)]
+#[builder(default)]
 pub struct GameOptions {
     pub rules: Rule,
     pub board_size: (u32, u32),

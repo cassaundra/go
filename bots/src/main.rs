@@ -1,4 +1,9 @@
+#[macro_use]
+extern crate derive_builder;
+
 extern crate log;
+
+use log::*;
 
 mod bot;
 pub use bot::*;

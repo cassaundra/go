@@ -21,15 +21,14 @@ pub struct GtpBot {
 impl Drop for GtpBot {
     fn drop(&mut self) {
         // TODO this is necessary, yes?
-        self.child.kill()
-            .expect("Could not kill child process.");
+        self.child.kill().expect("Could not kill child process.");
     }
 }
 
 impl GtpBot {
-    pub fn new(command: String, args: Vec<String>) -> Self {
+    pub fn new(command: &str, args: &[&str]) -> Self {
         let mut child = Command::new(&command)
-            .args(&args)
+            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -43,6 +42,10 @@ impl GtpBot {
         }
     }
 
+    pub fn gnugo(level: usize) -> Self {
+        GtpBot::new("/usr/bin/gnugo", &["--mode", "gtp", "--level", &level.to_string()])
+    }
+
     pub fn reset(&mut self) -> io::Result<()> {
         self.clear_board()?;
         self.is_setup = false;
@@ -53,6 +56,7 @@ impl GtpBot {
     fn send_command(&mut self, command: &GtpCommand) -> io::Result<()> {
         // TODO is this cheap?
         // let mut writer = self.child.stdin.take().unwrap();
+        trace!("Sending command: {}", command.to_string().trim());
         writeln!(self.child_stdin, "{}", command.to_string())
     }
 
@@ -71,9 +75,17 @@ impl GtpBot {
     }
 
     fn setup(&mut self, game: &Game) -> io::Result<()> {
+        // ensure that the bot is reset
         self.clear_board()?;
 
-        // TODO set komi, board size
+        // set komi
+        self.send_command(&GtpCommand::new_with_args("komi", |eb| eb.f(game.komi())))?;
+
+        // set board size
+        let (width, height) = game.goban().size();
+        self.send_command(&GtpCommand::new_with_args("boardsize", |eb| {
+            eb.i(width as u32).i(height as u32).list()
+        }))?;
 
         // call play command for each stone on the board
         for stone in game.goban().get_stones() {
