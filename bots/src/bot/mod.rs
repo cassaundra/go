@@ -1,5 +1,5 @@
-use goban::rules::*;
 use goban::rules::game::*;
+use goban::rules::*;
 
 mod random;
 pub use random::*;
@@ -9,8 +9,6 @@ pub use self::gtp::*;
 
 // mod mcts;
 // pub use mcts::*;
-
-pub const RECURSE_DEPTH: usize = 1;
 
 pub trait Bot {
     fn play(&mut self, game: &Game) -> Move;
@@ -23,9 +21,6 @@ pub trait DefaultingBot<'a, B: Bot + 'a> {
 
 impl<'a, B: Bot + 'a> Bot for dyn DefaultingBot<'a, B> {
     fn play(&mut self, game: &Game) -> Move {
-        match DefaultingBot::play(self, game) {
-            Some(mov) => mov,
-            None => self.default().play(game),
-        }
+        self.play(game).unwrap_or_else(|| self.default().play(game))
     }
 }

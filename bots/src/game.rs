@@ -104,20 +104,18 @@ pub fn play_game(options: &GameOptions, black: &mut impl Bot, white: &mut impl B
     let mut moves = 0;
 
     while !game.is_over() && moves < options.max_moves {
-        let turn = game.turn();
         let bot_move = match game.turn() {
             Player::Black => black.play(&game),
             Player::White => white.play(&game),
         };
 
-        trace!("PLAY: {:?} at {:2?} (Move {})", turn, bot_move, moves + 1);
+        debug!("PLAY: {:?} at {:2?} (Move {})", game.turn(), bot_move, moves + 1);
 
         // TODO handle illegal plays with Game::try_play
-        // info!("SGF: {}", crate::sgf::game_to_sgf(&game, "Black", "White"));
         match game.try_play(bot_move) {
             Ok(_) => {},
             Err(err) => {
-                error!("Error: {:?}", err);
+                error!("Error during game: {:?}", err);
             }
         }
 
@@ -125,6 +123,7 @@ pub fn play_game(options: &GameOptions, black: &mut impl Bot, white: &mut impl B
     }
 
     if game.is_over() {
+        info!("SGF: {}", crate::sgf::game_to_sgf(&game, "Black", "White"));
         game.outcome().unwrap()
     } else {
         let (black_score, white_score) = game.calculate_score();

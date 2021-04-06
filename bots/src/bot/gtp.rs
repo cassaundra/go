@@ -1,26 +1,42 @@
 use std::io::{self, BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
+use err_derive::Error;
+
 use goban::pieces::stones::{Color, Stone};
 
 use ::gtp::Command as GtpCommand;
+use ::gtp::Response as GtpResponse;
 
 use log::*;
 
 use super::*;
 
-pub const DEFAULT_TIMEOUT: usize = 20 * 1000;
+type GtpResult<T> = std::result::Result<T, GtpError>;
+
+// pub const DEFAULT_TIMEOUT: usize = 20 * 1000;
+
+#[derive(Debug, Error)]
+enum GtpError {
+    #[error(display = "I/O error: {}", _0)]
+    Io(#[error(source)] io::Error),
+    #[error(display = "Response error: {:?}", _0)]
+    Response(#[error(from)] ::gtp::ResponseError),
+    #[error(display = "Response parse error: {:?}", _0)]
+    ResponseParse(#[error(from)] ::gtp::ResponseParseError),
+}
 
 pub struct GtpBot {
     child: Child,
     child_stdin: ChildStdin,
     child_stdout: ChildStdout,
     is_setup: bool,
+    // board_hash: Option<u64>,
 }
 
 impl Drop for GtpBot {
     fn drop(&mut self) {
-        // TODO this is necessary, yes?
+        // TODO is this necessary?
         self.child.kill().expect("Could not kill child process.");
     }
 }
@@ -46,25 +62,35 @@ impl GtpBot {
         GtpBot::new("/usr/bin/gnugo", &["--mode", "gtp", "--level", &level.to_string()])
     }
 
-    pub fn reset(&mut self) -> io::Result<()> {
-        self.clear_board()?;
-        self.is_setup = false;
+    fn send_command(&mut self, command: &GtpCommand) -> GtpResult<GtpResponse> {
+        // trace!("Sending command: {}", command.to_string().trim());
+        writeln!(self.child_stdin, "{}", command.to_string())?;
 
+        self.get_response()
+    }
+
+    fn get_response(&mut self) -> GtpResult<GtpResponse> {
+        let mut reader = BufReader::new(&mut self.child_stdout);
+
+        // TODO timeout? and attempt counting
+
+        let mut out = String::new();
+        reader.read_line(&mut out)?;
+        reader.read_line(&mut String::new())?;
+
+        let mut rp = ::gtp::ResponseParser::new();
+        rp.feed(&out);
+        rp.feed("\n");
+
+        rp.get_response().map_err(Into::into)
+    }
+
+    fn clear_board(&mut self) -> GtpResult<()> {
+        self.send_command(&GtpCommand::new("clear_board"))?;
         Ok(())
     }
 
-    fn send_command(&mut self, command: &GtpCommand) -> io::Result<()> {
-        // TODO is this cheap?
-        // let mut writer = self.child.stdin.take().unwrap();
-        trace!("Sending command: {}", command.to_string().trim());
-        writeln!(self.child_stdin, "{}", command.to_string())
-    }
-
-    fn clear_board(&mut self) -> io::Result<()> {
-        self.send_command(&GtpCommand::new("clear_board"))
-    }
-
-    fn push_stone(&mut self, stone: &Stone) -> io::Result<()> {
+    fn push_stone(&mut self, stone: &Stone) -> GtpResult<()> {
         let play_cmd = GtpCommand::new_with_args("play", |eb| {
             let c = &stone.coordinates;
             eb.mv(stone.color == Color::White, ((c.0 + 1).into(), (c.1 + 1).into()))
@@ -74,7 +100,7 @@ impl GtpBot {
         Ok(())
     }
 
-    fn setup(&mut self, game: &Game) -> io::Result<()> {
+    fn setup(&mut self, game: &Game) -> GtpResult<()> {
         // ensure that the bot is reset
         self.clear_board()?;
 
@@ -97,57 +123,47 @@ impl GtpBot {
         Ok(())
     }
 
-    fn update(&mut self, game: &Game) -> std::io::Result<()> {
-        let history = game.history();
-        if history.len() > 1 {
-            let difference = crate::sgf::goban_difference(history.last().unwrap(), game.goban());
+    fn sync_state(&mut self, game: &Game) -> GtpResult<()> {
+        if self.is_setup {
+            if game.passes() == 0 {
+                if let Some(last) = game.history().last() {
+                    let difference = crate::sgf::goban_difference(last, game.goban());
 
-            for stone in difference {
-                self.push_stone(&stone)?;
+                    for stone in difference {
+                        self.push_stone(&stone)?;
+                    }
+                }
             }
+        } else {
+            self.setup(game)?;
         }
 
         Ok(())
     }
 
-    fn generate_move(&mut self, game: &Game) -> io::Result<Move> {
+    fn generate_move(&mut self, game: &Game) -> GtpResult<Move> {
+        // execute the generate move command
         let genmove_cmd = GtpCommand::new_with_args("genmove", |eb| {
-            if game.turn() == goban::rules::Player::White {
+            if game.turn() == Player::White {
                 eb.w()
             } else {
                 eb.b()
             }
         });
-        self.send_command(&genmove_cmd)?;
 
-        // let stdout = self.child.stdout.take().unwrap();
-        let mut reader = BufReader::new(&mut self.child_stdout);
+        let response = self.send_command(&genmove_cmd)?;
 
-        let mut out = String::new();
-        let mut attempts = 0;
-
-        // TODO timeout
-        // warn if resign by timeout
-
-        while out.len() < 4 && attempts < 128 {
-            out.clear();
-            reader.read_line(&mut out)?;
-            reader.read_line(&mut String::new())?;
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            attempts += 1;
-        }
-
-        let mut rp = ::gtp::ResponseParser::new();
-        rp.feed(&format!("{}\n", out));
-
-        let mut ep = ::gtp::EntityParser::new(&rp.get_response().unwrap().text());
+        // parse the response into a vertex entity
+        let mut ep = ::gtp::EntityParser::new(&response.text());
         let res = ep.vertex().result().unwrap();
 
         let m = match res[0] {
             ::gtp::Entity::Vertex((h, v)) => {
+                // PASS is parsed as vertex 0 0
                 if h == 0 && v == 0 {
                     Move::Pass
                 } else {
+                    // play with corrected offset
                     Move::Play(h as u8 - 1, v as u8 - 1)
                 }
             }
@@ -156,15 +172,21 @@ impl GtpBot {
 
         Ok(m)
     }
+
+    fn play_move(&mut self, game: &Game) -> GtpResult<Move> {
+        // ensure that the gtp process has the current game state
+        self.sync_state(game)?;
+
+        // generate a move
+        self.generate_move(game)
+    }
 }
 
 impl Bot for GtpBot {
     fn play(&mut self, game: &Game) -> Move {
-        if !self.is_setup {
-            self.setup(game);
-        }
-
-        self.update(game);
-        self.generate_move(game).expect("I/O error")
+        self.play_move(game).unwrap_or_else(|err| {
+            warn!("An error occurred for GTP client: {:?}", err);
+            Move::Pass
+        })
     }
 }

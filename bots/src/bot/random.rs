@@ -1,5 +1,5 @@
 use rand::seq::IteratorRandom;
-use rand::{Rng, rngs::ThreadRng, thread_rng};
+use rand::{rngs::ThreadRng, thread_rng, Rng};
 
 use super::*;
 
@@ -21,8 +21,8 @@ impl RandomBot {
 impl Bot for RandomBot {
     fn play(&mut self, game: &Game) -> Move {
         game.legals()
-            .choose(&mut rand::thread_rng())
-            .map(|point| Move::Play(point.0,point.1))
+            .choose(&mut self.rng)
+            .map(|point| Move::Play(point.0, point.1))
             .unwrap_or(Move::Pass)
     }
 }
@@ -51,7 +51,8 @@ impl MixedBot {
         // TODO assert all weights are > 0
         // and length > 0
 
-        let weight_bounds = weights.iter()
+        let weight_bounds = weights
+            .iter()
             .map(|w| w / sum)
             .scan(0., |sum_weight, weight| {
                 *sum_weight += weight;
@@ -71,10 +72,16 @@ impl Bot for MixedBot {
     fn play(&mut self, game: &Game) -> Move {
         let r = self.rng.gen_range(0.0..1.0);
 
-        let idx = self.weight_bounds.iter()
+        let idx = self
+            .weight_bounds
+            .iter()
             .enumerate()
             .find_map(|(idx, &weight)| {
-                if r < weight { Some(idx) } else { None }
+                if r < weight {
+                    Some(idx)
+                } else {
+                    None
+                }
             })
             .unwrap();
 

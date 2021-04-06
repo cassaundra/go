@@ -15,5 +15,5 @@ mod sgf;
 pub use sgf::*;
 
 fn main() {
-    pretty_env_logger::init();
+    env_logger::init();
 }
