@@ -36,7 +36,6 @@ pub struct GtpBot {
 
 impl Drop for GtpBot {
     fn drop(&mut self) {
-        // TODO is this necessary?
         self.child.kill().expect("Could not kill child process.");
     }
 }
@@ -76,7 +75,7 @@ impl GtpBot {
 
         let mut out = String::new();
         reader.read_line(&mut out)?;
-        reader.read_line(&mut String::new())?;
+        reader.consume(1); // consume trailing newline
 
         let mut rp = ::gtp::ResponseParser::new();
         rp.feed(&out);

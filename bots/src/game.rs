@@ -111,12 +111,8 @@ pub fn play_game(options: &GameOptions, black: &mut impl Bot, white: &mut impl B
 
         debug!("PLAY: {:?} at {:2?} (Move {})", game.turn(), bot_move, moves + 1);
 
-        // TODO handle illegal plays with Game::try_play
-        match game.try_play(bot_move) {
-            Ok(_) => {},
-            Err(err) => {
-                error!("Error during game: {:?}", err);
-            }
+        if let Err(err) = game.try_play(bot_move) {
+            error!("Error during game: {:?}", err);
         }
 
         moves += 1;
